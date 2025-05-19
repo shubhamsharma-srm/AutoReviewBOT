@@ -1,7 +1,7 @@
 // test_files/sample.cpp
 #include <iostream>
 void longlonglongFunction(){
-      for (int i = 0; i < 45; ++i) {
+      for (int i = 0; i < 29; ++i) {
     std::cout << i << std::endl;
   }
 }
