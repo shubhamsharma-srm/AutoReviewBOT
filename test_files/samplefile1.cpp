@@ -6,8 +6,15 @@ void longFunction() {
   }
 }
 
+void longlongFunction(){
+      for (int i = 0; i < 45; ++i) {
+    std::cout << i << std::endl;
+  }
+}
+
 int main() {
     std::cout << "Hello from sample.cpp!" << std::endl;
     longFunction();
+    longlongFunction();
     return 0;
 }
