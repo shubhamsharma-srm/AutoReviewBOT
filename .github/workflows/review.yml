@@ -11,6 +11,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Important: fetch entire history so git diff works
+
 
       - name: Install dependencies
         run: |
