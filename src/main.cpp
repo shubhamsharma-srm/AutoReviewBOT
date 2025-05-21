@@ -1,77 +1,35 @@
-#include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 #include <clang/Frontend/FrontendActions.h>
-#include <clang/AST/ASTConsumer.h>
-#include <clang/AST/RecursiveASTVisitor.h>
-#include <clang/AST/ASTContext.h>
-#include <llvm/Support/CommandLine.h>
-#include <clang/Frontend/CompilerInstance.h>
-#include <iostream>
-#include "../include/RuleLongFunction.hpp"
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <clang/Frontend/CompilerInstance.h>
+#include <clang/Tooling/CompilationDatabase.h>
 
-using namespace clang::ast_matchers;
+#include <iostream>
+#include "../include/RuleLongFunction.hpp"
+
 using namespace clang;
 using namespace clang::tooling;
-using namespace llvm;
+using namespace clang::ast_matchers;
 
-static cl::OptionCategory ToolCategory("AutoCheckCpp tool options");
-
-// AST Visitor to walk the syntax tree
-class MyASTVisitor : public RecursiveASTVisitor<MyASTVisitor> {
-public:
-    explicit MyASTVisitor(ASTContext *Context) : Context(Context) {}
-
-    bool VisitFunctionDecl(FunctionDecl *func) {
-        if (func->getNameAsString() == "main") {
-            FullSourceLoc fullLoc(func->getBeginLoc(), Context->getSourceManager());
-            if (fullLoc.isValid()) {
-                llvm::outs() << "⚠️  Warning: Function named 'main' found at "
-                             << fullLoc.getSpellingLineNumber() << ":"
-                             << fullLoc.getSpellingColumnNumber() << "\n";
-            }
-        }
-        return true;
-    }
-
-private:
-    ASTContext *Context;
-};
-
-// AST Consumer
-class MyASTConsumer : public ASTConsumer {
-public:
-    explicit MyASTConsumer(ASTContext *Context) : Visitor(Context) {}
-
-    void HandleTranslationUnit(ASTContext &Context) override {
-        Visitor.TraverseDecl(Context.getTranslationUnitDecl());
-    }
-
-private:
-    MyASTVisitor Visitor;
-};
-
-// FrontendAction
-class MyFrontendAction : public ASTFrontendAction {
-public:
-    std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
-                                                   StringRef file) override {
-        return std::make_unique<MyASTConsumer>(&CI.getASTContext());
-    }
-};
-
-// Main entry point
 int main(int argc, const char **argv) {
-    auto ExpectedParser = CommonOptionsParser::create(argc, argv, ToolCategory);
-    if (!ExpectedParser) {
-        llvm::errs() << "Failed to parse options: "
-                     << llvm::toString(ExpectedParser.takeError()) << "\n";
+    if (argc < 2) {
+        llvm::errs() << "Usage: " << argv[0] << " <source-file> [<more-files>...]\n";
         return 1;
     }
-    CommonOptionsParser &OptionsParser = ExpectedParser.get();
 
-    ClangTool Tool(OptionsParser.getCompilations(), OptionsParser.getSourcePathList());
+    std::vector<std::string> sourcePaths;
+    for (int i = 1; i < argc; ++i) {
+        sourcePaths.emplace_back(argv[i]);
+    }
+
+    // Basic flags — you can expand this with "-Iinclude" etc. if needed
+    std::vector<std::string> compilationFlags = {
+        "-std=c++17", "-Iinclude", "-I/usr/include", "-I/usr/local/include"
+    };
+
+    FixedCompilationDatabase compilations(".", compilationFlags);
+    ClangTool Tool(compilations, sourcePaths);
 
     LongFunctionCallback longFunctionCallback;
     MatchFinder Finder;
