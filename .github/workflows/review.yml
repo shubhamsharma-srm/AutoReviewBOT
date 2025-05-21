@@ -1,0 +1,54 @@
+name: AutoReview Bot
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  autocheck-review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang build-essential
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang build-essential \
+            libclang-17-dev llvm-17-dev zlib1g-dev libzstd-dev libxml2-dev \
+            libedit-dev libffi-dev libtinfo-dev curl
+
+      - name: Build AutoCheckCpp
+        run: |
+          mkdir build
+          cd build
+          cmake "$GITHUB_WORKSPACE"
+          make
+
+      - name: Get changed C++ files
+        id: get_files
+        run: |
+          echo "CHANGED_FILES=$(git diff --name-only origin/main | grep -E '\.cpp$|\.hpp$' | tr '\n' ' ')" >> "$GITHUB_ENV"
+
+      - name: Run AutoCheckCpp on changed files
+        run: |
+          mkdir -p review_output
+          for file in $CHANGED_FILES; do
+            echo "Analyzing $file"
+            ./build/autocheckcpp "$file" >> review_output/violations.txt
+          done
+
+      - name: Post comments on PR (console-only for now)
+        run: |
+          if [ -s review_output/violations.txt ]; then
+            echo "Violations Found:"
+            cat review_output/violations.txt
+          else
+            echo "✅ No violations found."
+          fi
