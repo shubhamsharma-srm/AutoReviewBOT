@@ -21,7 +21,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake ..
+          cmake $GITHUB_WORKSPACE
           make
 
       - name: Get changed C++ files
