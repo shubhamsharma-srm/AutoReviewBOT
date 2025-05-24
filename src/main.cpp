@@ -1,39 +1,107 @@
-#include <clang/Tooling/Tooling.h>
-#include <clang/Frontend/FrontendActions.h>
-#include <clang/ASTMatchers/ASTMatchers.h>
-#include <clang/ASTMatchers/ASTMatchFinder.h>
-#include <clang/Frontend/CompilerInstance.h>
-#include <clang/Tooling/CompilationDatabase.h>
+// #include "../include/RuleLongFunction.hpp"
+// #include <clang/Tooling/CommonOptionsParser.h>
+// #include <clang/Tooling/Tooling.h>
+// #include <clang/ASTMatchers/ASTMatchFinder.h>
+// #include <llvm/Support/CommandLine.h>
 
-#include <iostream>
+// using namespace clang::tooling;
+// using namespace clang::ast_matchers;
+// using namespace llvm;
+
+// // Define a category for command-line options
+// static cl::OptionCategory AutoCheckCategory("AutoCheckCpp Options");
+
+// int main(int argc, const char **argv) {
+//     auto ExpectedParser = CommonOptionsParser::create(argc, argv, AutoCheckCategory);
+//     if (!ExpectedParser) {
+//         llvm::errs() << "Failed to parse options: "
+//                      << llvm::toString(ExpectedParser.takeError()) << "\n";
+//         return 1;
+//     }
+//     CommonOptionsParser &OptionsParser = ExpectedParser.get();
+
+//     // Get the list of source files
+//     ClangTool Tool(OptionsParser.getCompilations(), OptionsParser.getSourcePathList());
+
+//     // Set up the matcher and callback
+//     LongFunctionCallback longFunctionCallback;
+//     MatchFinder finder;
+//     finder.addMatcher(functionDecl(isDefinition()).bind("longFunc"), &longFunctionCallback);
+
+//     // Run the tool
+//     return Tool.run(newFrontendActionFactory(&finder).get());
+// }
+
+
+#include <clang/Tooling/Tooling.h>
+#include <clang/Tooling/CompilationDatabase.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
 #include "../include/RuleLongFunction.hpp"
 
-using namespace clang;
+#include <filesystem>
+#include <vector>
+#include <string>
+#include <iostream>
+
+namespace fs = std::filesystem;
 using namespace clang::tooling;
 using namespace clang::ast_matchers;
 
+std::vector<std::string> getSourceFiles(const std::string& dir) {
+    std::vector<std::string> sources;
+
+    // Canonical paths to exclude (tool's own source)
+    std::vector<std::string> excludeDirs = {
+        fs::canonical("../build").string(),
+        fs::canonical("../src").string(),
+        fs::canonical("../include").string(),
+    };
+
+    for (const auto& entry : fs::recursive_directory_iterator(dir)) {
+        if (!entry.is_regular_file())
+            continue;
+
+        std::string path = fs::canonical(entry.path()).string();
+
+        // Skip build/include/src directories
+        bool skip = false;
+        for (const auto& exclude : excludeDirs) {
+            if (path.find(exclude) == 0) {
+                skip = true;
+                break;
+            }
+        }
+        if (skip) continue;
+
+        if (entry.path().extension() == ".cpp" || entry.path().extension() == ".hpp") {
+            sources.push_back(path);
+        }
+    }
+
+    return sources;
+}
+
 int main(int argc, const char **argv) {
-    if (argc < 2) {
-        llvm::errs() << "Usage: " << argv[0] << " <source-file> [<more-files>...]\n";
+    std::string targetDir = "..";  // Default source root
+    if (argc > 1) {
+        targetDir = argv[1];
+    }
+
+    std::vector<std::string> sources = getSourceFiles(targetDir);
+    if (sources.empty()) {
+        std::cerr << "No .cpp/.hpp files found.\n";
         return 1;
     }
 
-    std::vector<std::string> sourcePaths;
-    for (int i = 1; i < argc; ++i) {
-        sourcePaths.emplace_back(argv[i]);
-    }
+    // Use a fixed dummy compilation command (adjust as needed)
+    std::vector<std::string> compileArgs = {"-std=c++17"};
+    FixedCompilationDatabase Compilations(".", compileArgs);
 
-    // Basic flags — you can expand this with "-Iinclude" etc. if needed
-    std::vector<std::string> compilationFlags = {
-        "-std=c++17", "-Iinclude", "-I/usr/include", "-I/usr/local/include"
-    };
+    ClangTool Tool(Compilations, sources);
 
-    FixedCompilationDatabase compilations(".", compilationFlags);
-    ClangTool Tool(compilations, sourcePaths);
+    LongFunctionCallback callback;
+    MatchFinder finder;
+    finder.addMatcher(functionDecl(isDefinition()).bind("longFunc"), &callback);
 
-    LongFunctionCallback longFunctionCallback;
-    MatchFinder Finder;
-    Finder.addMatcher(functionDecl(isDefinition()).bind("longFunc"), &longFunctionCallback);
-
-    return Tool.run(newFrontendActionFactory(&Finder).get());
+    return Tool.run(newFrontendActionFactory(&finder).get());
 }

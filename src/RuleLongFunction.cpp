@@ -3,40 +3,56 @@
 #include <clang/AST/Decl.h>
 #include <clang/AST/Stmt.h>
 #include <clang/Basic/SourceManager.h>
+#include <clang/Lex/Lexer.h>
+#include<sstream>
+#include<string>
+#include<regex> 
 #include <llvm/Support/raw_ostream.h>
+#include<iostream>
 
 using namespace clang;
 using namespace clang::ast_matchers;
 
+
 void LongFunctionCallback::run(const MatchFinder::MatchResult &Result) {
-    if (const FunctionDecl *Func = Result.Nodes.getNodeAs<FunctionDecl>("longFunc")) {
-        const Stmt *Body = Func->getBody();
-        if (!Body) return;
+    const FunctionDecl *func = Result.Nodes.getNodeAs<FunctionDecl>("longFunc");
+    if (!func || !func->hasBody()) return;
 
-        const SourceManager &SM = *Result.SourceManager;
-        unsigned startLine = SM.getSpellingLineNumber(Body->getBeginLoc());
-        unsigned endLine = SM.getSpellingLineNumber(Body->getEndLoc());
-        unsigned lineCount = endLine - startLine + 1;
+    const SourceManager &SM = *Result.SourceManager;
+    SourceLocation startLoc = func->getSourceRange().getBegin();
+    SourceLocation endLoc = func->getSourceRange().getEnd();
 
-        clang::FullSourceLoc FullLocation(Func->getBeginLoc(), SM);
+    // Get raw source text of the function
+    SourceLocation expandedEnd = Lexer::getLocForEndOfToken(endLoc, 0, SM, Result.Context->getLangOpts());
+    CharSourceRange charRange = CharSourceRange::getCharRange(startLoc, expandedEnd);
+    StringRef funcCode = Lexer::getSourceText(charRange, SM, Result.Context->getLangOpts());
 
-if (FullLocation.isValid() &&
-    lineCount > 30) {
+    // Count only non-blank, non-comment lines
+    std::istringstream stream(funcCode.str());
+    std::string line;
+    int meaningfulLineCount = 0;
+    std::regex codeRegex(R"([^{};\s])");  // Matches if line has actual code
 
-    std::string filename = SM.getFilename(Func->getBeginLoc()).str();
+    while (std::getline(stream, line)) {
+        std::string trimmed = llvm::StringRef(line).trim().str();
 
-    // Only analyze files from test_files directory
-    if (filename.find("/test_files/") != std::string::npos) {
-        llvm::errs() << "Violation: Function '" << Func->getNameInfo().getName().getAsString()
-                     << "' has " << lineCount << " lines (File: " << filename << ").\n";
+        if (trimmed.empty()) continue;
+        if (trimmed.find("//") == 0) continue;
+        if (trimmed.find("/*") == 0 || trimmed.find("*") == 0) continue;
+        if (!std::regex_search(trimmed, codeRegex)) continue;
+
+        ++meaningfulLineCount;
+    }
+
+    // std::cout << "Matched function: " << func->getNameAsString()
+    //           << " (Executable lines: " << meaningfulLineCount << ")\n";
+
+    // Skip functions in system headers
+    if (SM.isInSystemHeader(startLoc)) return;
+    if (meaningfulLineCount > 0) {
+        std::cout << "Violation: Function '" << func->getNameAsString()
+                  << "' has " << meaningfulLineCount << " executable lines "
+                  << "(File: " << SM.getFilename(startLoc).str() << ").\n";
     }
 }
-        {
-            llvm::errs() << "Violation: Function '" << Func->getNameInfo().getName().getAsString()
-                         << "' has " << lineCount << " lines.\n";
-        }
-    }
-}
-
-
 
