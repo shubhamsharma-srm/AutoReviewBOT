@@ -11,6 +11,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Important: fetch entire history so git diff works
+
 
       - name: Install dependencies
         run: |
@@ -34,14 +37,17 @@ jobs:
       - name: Get changed C++ files
         id: get_files
         run: |
-          echo "CHANGED_FILES=$(git diff --name-only origin/main | grep -E '\.cpp$|\.hpp$' | tr '\n' ' ')" >> "$GITHUB_ENV"
+          git fetch origin ${{ github.base_ref }}
+          echo "CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '\.cpp$|\.hpp$' | tr '\n' ' ')" >> "$GITHUB_ENV"
+
 
       - name: Run AutoCheckCpp on changed files
         run: |
           mkdir -p review_output
+          cd build
           for file in $CHANGED_FILES; do
-            echo "Analyzing $file"
-            ./build/autocheckcpp "$file" >> review_output/violations.txt
+            echo "Analyzing ../$file"
+            ./autocheckcpp "../$file" >> ../review_output/violations.txt
           done
 
       - name: Post comments on PR (console-only for now)
