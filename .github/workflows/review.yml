@@ -44,9 +44,10 @@ jobs:
       - name: Run AutoCheckCpp on changed files
         run: |
           mkdir -p review_output
+          cd build
           for file in $CHANGED_FILES; do
-            echo "Analyzing $file"
-            ./build/autocheckcpp "$file" >> review_output/violations.txt
+            echo "Analyzing ../$file"
+            ./autocheckcpp "../$file" >> ../review_output/violations.txt
           done
 
       - name: Post comments on PR (console-only for now)

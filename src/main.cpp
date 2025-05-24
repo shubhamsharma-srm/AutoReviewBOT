@@ -95,7 +95,8 @@ int main(int argc, const char **argv) {
 
     // Use a fixed dummy compilation command (adjust as needed)
     std::vector<std::string> compileArgs = {"-std=c++17"};
-    FixedCompilationDatabase Compilations(".", compileArgs);
+    // FixedCompilationDatabase Compilations(".", compileArgs);
+    FixedCompilationDatabase Compilations(fs::current_path().string(), compileArgs);
 
     ClangTool Tool(Compilations, sources);
 
